@@ -73,67 +73,6 @@
   }
 }
 
-/* ─── GLOW PULSE ANIMATIONS ────────────────────────────────────────── */
-
-/* Study glow pulse — blue/green tone */
-@keyframes glow-pulse-study {
-  0%,
-  100% {
-    text-shadow: 0 0 8px rgba(255, 255, 255, 0.4), 0 0 16px
-      rgba(255, 255, 255, 0.25), 0 0 12px rgba(0, 255, 150, 0.6), 0 0 28px
-      rgba(0, 255, 150, 0.3), 2px 2px 6px rgba(0, 0, 0, 0.6);
-  }
-  50% {
-    text-shadow: 0 0 12px rgba(255, 255, 255, 0.55), 0 0 24px
-      rgba(255, 255, 255, 0.35), 0 0 20px rgba(0, 255, 150, 0.85), 0 0 42px
-      rgba(0, 255, 150, 0.45), 2px 2px 6px rgba(0, 0, 0, 0.6);
-  }
-}
-
-/* Break glow pulse — orange/red tone */
-@keyframes glow-pulse-break {
-  0%,
-  100% {
-    text-shadow: 0 0 8px rgba(255, 255, 255, 0.4), 0 0 16px
-      rgba(255, 255, 255, 0.25), 0 0 12px rgba(255, 100, 0, 0.6), 0 0 28px
-      rgba(255, 100, 0, 0.3), 2px 2px 6px rgba(0, 0, 0, 0.6);
-  }
-  50% {
-    text-shadow: 0 0 12px rgba(255, 255, 255, 0.55), 0 0 24px
-      rgba(255, 255, 255, 0.35), 0 0 20px rgba(255, 100, 0, 0.85), 0 0 42px
-      rgba(255, 100, 0, 0.45), 2px 2px 6px rgba(0, 0, 0, 0.6);
-  }
-}
-
-/* Slightly subtler pulse for session label */
-@keyframes glow-pulse-session-study {
-  0%,
-  100% {
-    text-shadow: 0 0 8px rgba(255, 255, 255, 0.35), 0 0 16px
-      rgba(255, 255, 255, 0.2), 0 0 10px rgba(0, 255, 150, 0.45), 2px 2px 6px
-      rgba(0, 0, 0, 0.6);
-  }
-  50% {
-    text-shadow: 0 0 10px rgba(255, 255, 255, 0.5), 0 0 20px
-      rgba(255, 255, 255, 0.28), 0 0 18px rgba(0, 255, 150, 0.65), 0 0 32px
-      rgba(0, 255, 150, 0.3), 2px 2px 6px rgba(0, 0, 0, 0.6);
-  }
-}
-
-@keyframes glow-pulse-session-break {
-  0%,
-  100% {
-    text-shadow: 0 0 8px rgba(255, 255, 255, 0.35), 0 0 16px
-      rgba(255, 255, 255, 0.2), 0 0 10px rgba(255, 100, 0, 0.45), 2px 2px 6px
-      rgba(0, 0, 0, 0.6);
-  }
-  50% {
-    text-shadow: 0 0 10px rgba(255, 255, 255, 0.5), 0 0 20px
-      rgba(255, 255, 255, 0.28), 0 0 18px rgba(255, 100, 0, 0.65), 0 0 32px
-      rgba(255, 100, 0, 0.3), 2px 2px 6px rgba(0, 0, 0, 0.6);
-  }
-}
-
 /* Pomodoro-specific styles */
 .pomodoro-outer {
   width: 100vw;
@@ -142,6 +81,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
   transition: background 0.5s ease;
 }
 
@@ -158,6 +98,15 @@
   background: transparent;
 }
 
+/* ─── EFFECT OVERLAY ───────────────────────────────────────────────── */
+.effect-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  transition: background-color 0.3s ease, opacity 0.3s ease;
+}
+
 .pomodoro-card {
   width: min(92vmin, 440px);
   display: flex;
@@ -166,9 +115,9 @@
   justify-content: center;
   gap: 0;
   position: relative;
+  z-index: 1;
   border-radius: 24px;
   padding: 40px 36px 36px;
-  /* Smooth mode transition on the card itself */
   transition: opacity 0.15s ease;
 }
 
@@ -191,26 +140,17 @@
   box-shadow: none;
 }
 
-/* ─── SESSION LABEL — large, bold, glowing ─────────────────────────── */
+/* ─── SESSION LABEL ─────────────────────────────────────────────────── */
 .session-label {
   font-size: clamp(36px, 8vmin, 48px);
   font-weight: 900;
-  letter-spacing: 0.06em; /* ~1.5px equivalent at 36px — keeps it sharp */
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   text-align: center;
   margin-bottom: 18px;
   line-height: 1;
-  transition: color 0.4s ease;
-}
-
-.session-label.study-mode {
-  color: oklch(0.88 0.14 168); /* bright blue-green */
-  animation: glow-pulse-session-study 2.5s ease-in-out infinite;
-}
-
-.session-label.break-mode {
-  color: oklch(0.82 0.18 48); /* bright orange */
-  animation: glow-pulse-session-break 2.5s ease-in-out infinite;
+  transition: color 0.3s ease;
+  /* Sharp shadow + stroke effect — applied via inline style for custom color */
 }
 
 /* ─── TIMER DISPLAY ────────────────────────────────────────────────── */
@@ -218,12 +158,12 @@
   font-size: clamp(80px, 18vmin, 120px);
   font-weight: 900;
   line-height: 1;
-  color: oklch(0.97 0.005 240);
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
   font-family: "GeneralSans", system-ui, -apple-system, sans-serif;
-  transition: color 0.4s ease, text-shadow 0.4s ease;
+  transition: color 0.3s ease;
   margin-bottom: 20px;
+  /* text-shadow and -webkit-text-stroke applied via inline style */
 }
 
 /* ─── PROGRESS BAR ─────────────────────────────────────────────────── */
@@ -235,14 +175,12 @@
   overflow: visible;
   margin-bottom: 16px;
   position: relative;
-  /* Subtle inset look for the track */
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
 .progress-fill {
   height: 100%;
   border-radius: 12px;
-  /* Smooth linear fill animation */
   transition: width 1s linear, background-color 0.4s ease, box-shadow 0.4s ease;
   position: relative;
 }
@@ -271,23 +209,14 @@
 .mode-label {
   font-size: clamp(26px, 5.5vmin, 32px);
   font-weight: 900;
-  letter-spacing: 0.15em; /* ~3.5px at 26px — bold, wide, OBS-friendly */
+  letter-spacing: 0.15em;
   text-transform: uppercase;
   text-align: center;
   margin-top: 12px;
   margin-bottom: 28px;
   line-height: 1;
-  transition: color 0.4s ease;
-}
-
-.mode-label.study-mode {
-  color: #3bf0e4;
-  animation: glow-pulse-study 2s ease-in-out infinite;
-}
-
-.mode-label.break-mode {
-  color: #ff6a2f;
-  animation: glow-pulse-break 2s ease-in-out infinite;
+  transition: color 0.3s ease;
+  /* text-shadow and -webkit-text-stroke applied via inline style */
 }
 
 /* ─── CONTROLS ─────────────────────────────────────────────────────── */
@@ -466,17 +395,42 @@
 }
 
 .settings-panel.open {
-  max-height: 120px;
+  max-height: 400px;
   opacity: 1;
   padding-top: 14px;
 }
 
 .settings-grid {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
   justify-content: center;
-  gap: 14px;
+  gap: 10px 14px;
   width: 100%;
+}
+
+.settings-section-title {
+  width: 100%;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: oklch(0.55 0.1 260);
+  text-align: center;
+  padding: 4px 0 2px;
+  border-bottom: 1px solid oklch(0.3 0.05 240 / 0.4);
+  margin-bottom: 2px;
+}
+
+.session-control-input {
+  width: 58px;
+  border-color: oklch(0.42 0.1 260 / 0.6) !important;
+  color: oklch(0.88 0.08 260) !important;
+}
+
+.session-control-input:focus {
+  border-color: oklch(0.62 0.18 260 / 0.8) !important;
+  box-shadow: 0 0 0 2px oklch(0.58 0.18 260 / 0.25) !important;
 }
 
 .settings-field {
@@ -509,7 +463,6 @@
   text-align: center;
   padding: 0 4px;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
-  /* Remove number input spinners */
   -moz-appearance: textfield;
   appearance: textfield;
 }
@@ -527,6 +480,42 @@
   color: oklch(0.92 0.04 240);
 }
 
+/* ─── COLOR PICKER FIELD ───────────────────────────────────────────── */
+.color-picker-field {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.color-picker-input {
+  width: 40px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid oklch(0.35 0.05 240 / 0.5);
+  background: oklch(0.14 0.02 240);
+  padding: 2px;
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+
+.color-picker-input:hover {
+  border-color: oklch(0.52 0.14 260 / 0.7);
+}
+
+.color-picker-input:focus {
+  outline: none;
+  border-color: oklch(0.52 0.14 260 / 0.7);
+  box-shadow: 0 0 0 2px oklch(0.58 0.18 260 / 0.15);
+}
+
+.settings-range {
+  width: 100%;
+  height: 4px;
+  accent-color: oklch(0.62 0.19 260);
+  cursor: pointer;
+  margin-top: 4px;
+}
 .settings-hint {
   margin: 8px 0 0;
   font-size: 9px;
@@ -547,6 +536,7 @@
   color: oklch(0.38 0.02 240);
   letter-spacing: 0.05em;
   pointer-events: none;
+  z-index: 2;
 }
 
 .footer-text.no-bg {

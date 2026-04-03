@@ -15,6 +15,37 @@ interface Settings {
   sessions: number;
 }
 
+interface SessionStyle {
+  sessionTextColor: string;
+  sessionOutlineColor: string;
+  sessionOutlineThickness: number;
+}
+
+interface ModeStyle {
+  modeColor: string;
+  modeOutlineColor: string;
+  modeOutlineThickness: number;
+}
+
+const DEFAULT_SESSION_STYLE: SessionStyle = {
+  sessionTextColor: "#ffffff",
+  sessionOutlineColor: "#000000",
+  sessionOutlineThickness: 1,
+};
+
+const DEFAULT_MODE_STYLE: ModeStyle = {
+  modeColor: "#00ff88",
+  modeOutlineColor: "#000000",
+  modeOutlineThickness: 1,
+};
+
+function hexToRgba(hex: string, alpha: number): string {
+  const r = Number.parseInt(hex.slice(1, 3), 16);
+  const g = Number.parseInt(hex.slice(3, 5), 16);
+  const b = Number.parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
 function parseUrlParams() {
   const params = new URLSearchParams(window.location.search);
   return {
@@ -28,7 +59,22 @@ function parseUrlParams() {
     sessions: params.has("sessions")
       ? Math.max(1, Number.parseInt(params.get("sessions")!, 10))
       : null,
+    currentSession: params.has("current")
+      ? Math.max(1, Number.parseInt(params.get("current")!, 10))
+      : null,
     transparent: params.get("transparent") === "true",
+    // Session text URL params
+    sessionColor: params.get("sessionColor"),
+    sessionOutline: params.get("sessionOutline"),
+    sessionStroke: params.has("sessionStroke")
+      ? Math.min(
+          3,
+          Math.max(0, Number.parseFloat(params.get("sessionStroke")!)),
+        )
+      : null,
+    // Mode text URL params
+    modeColor: params.get("modeColor"),
+    modeOutline: params.get("modeOutline"),
   };
 }
 
@@ -45,6 +91,76 @@ function loadStoredSettings(): Partial<Settings> | null {
 function saveSettings(settings: Settings) {
   try {
     localStorage.setItem("pomodoro_settings", JSON.stringify(settings));
+  } catch {
+    // ignore
+  }
+}
+
+function loadStoredSession(): { current: number; total: number } | null {
+  try {
+    const raw = localStorage.getItem("pomodoro_session_control");
+    if (!raw) return null;
+    return JSON.parse(raw) as { current: number; total: number };
+  } catch {
+    return null;
+  }
+}
+
+function saveSessionControl(current: number, total: number) {
+  try {
+    localStorage.setItem(
+      "pomodoro_session_control",
+      JSON.stringify({ current, total }),
+    );
+  } catch {
+    // ignore
+  }
+}
+
+// Session style uses exact localStorage keys as specified
+function loadStoredSessionStyle(): Partial<SessionStyle> | null {
+  try {
+    const color = localStorage.getItem("sessionTextColor");
+    const outline = localStorage.getItem("sessionOutlineColor");
+    const thicknessRaw = localStorage.getItem("sessionOutlineThickness");
+    if (!color && !outline && thicknessRaw === null) return null;
+    const result: Partial<SessionStyle> = {};
+    if (color) result.sessionTextColor = color;
+    if (outline) result.sessionOutlineColor = outline;
+    if (thicknessRaw !== null)
+      result.sessionOutlineThickness = Number(thicknessRaw);
+    return result;
+  } catch {
+    return null;
+  }
+}
+
+function saveSessionStyle(style: SessionStyle) {
+  try {
+    localStorage.setItem("sessionTextColor", style.sessionTextColor);
+    localStorage.setItem("sessionOutlineColor", style.sessionOutlineColor);
+    localStorage.setItem(
+      "sessionOutlineThickness",
+      String(style.sessionOutlineThickness),
+    );
+  } catch {
+    // ignore
+  }
+}
+
+function loadStoredModeStyle(): Partial<ModeStyle> | null {
+  try {
+    const raw = localStorage.getItem("pomodoro_mode_style");
+    if (!raw) return null;
+    return JSON.parse(raw) as Partial<ModeStyle>;
+  } catch {
+    return null;
+  }
+}
+
+function saveModeStyle(style: ModeStyle) {
+  try {
+    localStorage.setItem("pomodoro_mode_style", JSON.stringify(style));
   } catch {
     // ignore
   }
@@ -100,10 +216,78 @@ export default function App() {
 
   const initialSettings = resolveInitialSettings();
 
+  const resolveInitialSessionControl = (): {
+    current: number;
+    total: number;
+  } => {
+    const stored = loadStoredSession();
+    const totalFromUrl = urlParams.current.sessions ?? null;
+    const currentFromUrl = urlParams.current.currentSession ?? null;
+    const total = totalFromUrl ?? stored?.total ?? 7;
+    const current = currentFromUrl ?? stored?.current ?? 1;
+    return {
+      current: Math.min(Math.max(1, current), total),
+      total: Math.max(1, total),
+    };
+  };
+
+  const initialSessionControl = resolveInitialSessionControl();
+
+  // Resolve initial SESSION text style: URL params > localStorage > defaults
+  const resolveInitialSessionStyle = (): SessionStyle => {
+    const stored = loadStoredSessionStyle();
+    return {
+      sessionTextColor:
+        urlParams.current.sessionColor ??
+        stored?.sessionTextColor ??
+        DEFAULT_SESSION_STYLE.sessionTextColor,
+      sessionOutlineColor:
+        urlParams.current.sessionOutline ??
+        stored?.sessionOutlineColor ??
+        DEFAULT_SESSION_STYLE.sessionOutlineColor,
+      sessionOutlineThickness:
+        urlParams.current.sessionStroke ??
+        stored?.sessionOutlineThickness ??
+        DEFAULT_SESSION_STYLE.sessionOutlineThickness,
+    };
+  };
+
+  // Resolve initial MODE text style: URL params > localStorage > defaults
+  const resolveInitialModeStyle = (): ModeStyle => {
+    const stored = loadStoredModeStyle();
+    return {
+      modeColor:
+        urlParams.current.modeColor ??
+        stored?.modeColor ??
+        DEFAULT_MODE_STYLE.modeColor,
+      modeOutlineColor:
+        urlParams.current.modeOutline ??
+        stored?.modeOutlineColor ??
+        DEFAULT_MODE_STYLE.modeOutlineColor,
+      modeOutlineThickness:
+        stored?.modeOutlineThickness ?? DEFAULT_MODE_STYLE.modeOutlineThickness,
+    };
+  };
+
   const [studyInput, setStudyInput] = useState<string>(initialSettings.study);
   const [breakInput, setBreakInput] = useState<string>(initialSettings.break);
   const [sessionsInput, setSessionsInput] = useState<string>(
     initialSettings.sessions,
+  );
+
+  const [currentSessionInput, setCurrentSessionInput] = useState<string>(
+    String(initialSessionControl.current),
+  );
+  const [totalSessionsInput, setTotalSessionsInput] = useState<string>(
+    String(initialSessionControl.total),
+  );
+
+  // Separate style states for SESSION and MODE
+  const [sessionStyle, setSessionStyle] = useState<SessionStyle>(
+    resolveInitialSessionStyle,
+  );
+  const [modeStyle, setModeStyle] = useState<ModeStyle>(
+    resolveInitialModeStyle,
   );
 
   const [showSettings, setShowSettings] = useState(false);
@@ -111,12 +295,9 @@ export default function App() {
     urlParams.current.transparent,
   );
   const [copyLabel, setCopyLabel] = useState("COPY LINK");
-  // Track visual mode separately for smooth CSS transitions
   const [visualMode, setVisualMode] = useState<Mode>("study");
-  // Track if we are in a transitioning state
   const [transitioning, setTransitioning] = useState(false);
 
-  // Pending value refs — always reflect latest parsed inputs
   const pendingStudyRef = useRef(
     Math.max(1, Number.parseInt(initialSettings.study) || 25),
   );
@@ -126,8 +307,10 @@ export default function App() {
   const pendingSessionsRef = useRef(
     Math.max(1, Number.parseInt(initialSettings.sessions) || 7),
   );
+  const pendingCurrentSessionRef = useRef(initialSessionControl.current);
+  const pendingTotalSessionsRef = useRef(initialSessionControl.total);
 
-  // Keep pending refs in sync with input changes
+  // Persist settings on change
   useEffect(() => {
     pendingStudyRef.current = Math.max(1, Number.parseInt(studyInput) || 25);
     pendingBreakRef.current = Math.max(1, Number.parseInt(breakInput) || 5);
@@ -135,8 +318,6 @@ export default function App() {
       1,
       Number.parseInt(sessionsInput) || 7,
     );
-
-    // Persist settings to localStorage
     saveSettings({
       study: pendingStudyRef.current,
       break: pendingBreakRef.current,
@@ -144,11 +325,35 @@ export default function App() {
     });
   }, [studyInput, breakInput, sessionsInput]);
 
-  // Initialize timer state — always starts at session 1, never restores session state
+  useEffect(() => {
+    const total = Math.max(1, Number.parseInt(totalSessionsInput) || 7);
+    const current = Math.min(
+      Math.max(1, Number.parseInt(currentSessionInput) || 1),
+      total,
+    );
+    pendingCurrentSessionRef.current = current;
+    pendingTotalSessionsRef.current = total;
+    setTimerState((prev) => ({
+      ...prev,
+      session: current,
+    }));
+    saveSessionControl(current, total);
+  }, [currentSessionInput, totalSessionsInput]);
+
+  // Persist SESSION style on change (individual localStorage keys)
+  useEffect(() => {
+    saveSessionStyle(sessionStyle);
+  }, [sessionStyle]);
+
+  // Persist MODE style on change
+  useEffect(() => {
+    saveModeStyle(modeStyle);
+  }, [modeStyle]);
+
   const initState = (): TimerState => {
     const initStudy = pendingStudyRef.current;
     return {
-      session: 1,
+      session: initialSessionControl.current,
       mode: "study",
       timeLeft: initStudy * 60,
       isRunning: urlParams.current.autostart,
@@ -159,19 +364,17 @@ export default function App() {
   const timerStateRef = useRef(timerState);
   timerStateRef.current = timerState;
 
-  // Keep visualMode in sync with timerState.mode with transition
   useEffect(() => {
     if (timerState.mode !== visualMode) {
       setTransitioning(true);
       const t = setTimeout(() => {
         setVisualMode(timerState.mode);
         setTransitioning(false);
-      }, 120); // half of transition duration
+      }, 120);
       return () => clearTimeout(t);
     }
   }, [timerState.mode, visualMode]);
 
-  // Sync background transparency
   useEffect(() => {
     if (isTransparent) {
       document.body.style.background = "transparent";
@@ -182,12 +385,10 @@ export default function App() {
     }
   }, [isTransparent]);
 
-  // Advance to next mode/session — called automatically when timer hits 0
   const advance = useCallback(() => {
     const cur = timerStateRef.current;
     playBeep();
     if (cur.mode === "study") {
-      // Study done → start break (session number stays the same)
       setTimerState({
         session: cur.session,
         mode: "break",
@@ -195,29 +396,32 @@ export default function App() {
         isRunning: true,
       });
     } else {
-      // Break done → increment session ONLY here
       const nextSession = cur.session + 1;
-      if (nextSession > pendingSessionsRef.current) {
-        // All sessions complete — stop
+      if (nextSession > pendingTotalSessionsRef.current) {
+        // All sessions done — stop and stay at last session
         setTimerState({
-          session: pendingSessionsRef.current,
+          session: pendingTotalSessionsRef.current,
           mode: "study",
           timeLeft: pendingStudyRef.current * 60,
           isRunning: false,
         });
+        setCurrentSessionInput(String(pendingTotalSessionsRef.current));
+        pendingCurrentSessionRef.current = pendingTotalSessionsRef.current;
       } else {
-        // Continue with next session
         setTimerState({
           session: nextSession,
           mode: "study",
           timeLeft: pendingStudyRef.current * 60,
           isRunning: true,
         });
+        setCurrentSessionInput(String(nextSession));
+        pendingCurrentSessionRef.current = nextSession;
+        saveSessionControl(nextSession, pendingTotalSessionsRef.current);
       }
     }
   }, []);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional — only re-run when isRunning changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     if (!timerState.isRunning) return;
     const interval = setInterval(() => {
@@ -232,7 +436,6 @@ export default function App() {
     return () => clearInterval(interval);
   }, [timerState.isRunning]);
 
-  // Auto-advance when timeLeft hits 0 and timer was actually running (not initial load)
   const wasRunningRef = useRef(false);
   const advancedRef = useRef(false);
 
@@ -256,19 +459,21 @@ export default function App() {
     }
   }, [timerState.timeLeft, timerState.isRunning, advance]);
 
-  // Reset: go back to session 1, study mode, full study duration
   const handleReset = useCallback(() => {
     advancedRef.current = false;
     wasRunningRef.current = false;
+    const resetSession = 1;
+    setCurrentSessionInput("1");
+    pendingCurrentSessionRef.current = resetSession;
+    saveSessionControl(resetSession, pendingTotalSessionsRef.current);
     setTimerState({
-      session: 1,
+      session: resetSession,
       mode: "study",
       timeLeft: pendingStudyRef.current * 60,
       isRunning: false,
     });
   }, []);
 
-  // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).tagName === "INPUT") return;
@@ -290,7 +495,7 @@ export default function App() {
 
   const handleSkip = () => {
     advancedRef.current = false;
-    wasRunningRef.current = true; // treat skip as if timer was running
+    wasRunningRef.current = true;
     setTimerState((prev) => ({ ...prev, timeLeft: 0, isRunning: false }));
   };
 
@@ -299,8 +504,16 @@ export default function App() {
     const params = new URLSearchParams({
       study: String(pendingStudyRef.current),
       break: String(pendingBreakRef.current),
-      sessions: String(pendingSessionsRef.current),
+      sessions: String(pendingTotalSessionsRef.current),
+      current: String(pendingCurrentSessionRef.current),
       transparent: String(isTransparent),
+      // Session text params
+      sessionColor: sessionStyle.sessionTextColor,
+      sessionOutline: sessionStyle.sessionOutlineColor,
+      sessionStroke: String(sessionStyle.sessionOutlineThickness),
+      // Mode text params
+      modeColor: modeStyle.modeColor,
+      modeOutline: modeStyle.modeOutlineColor,
     });
     const url = `${base}?${params.toString()}`;
     navigator.clipboard
@@ -315,7 +528,6 @@ export default function App() {
       });
   };
 
-  // Clamp input values on blur
   const handleStudyBlur = () => {
     const val = Math.max(1, Number.parseInt(studyInput) || 25);
     setStudyInput(String(val));
@@ -331,6 +543,25 @@ export default function App() {
     setSessionsInput(String(val));
   };
 
+  const handleTotalSessionsBlur = () => {
+    const total = Math.max(1, Number.parseInt(totalSessionsInput) || 7);
+    const current = Math.min(
+      Math.max(1, Number.parseInt(currentSessionInput) || 1),
+      total,
+    );
+    setTotalSessionsInput(String(total));
+    setCurrentSessionInput(String(current));
+  };
+
+  const handleCurrentSessionBlur = () => {
+    const total = Math.max(1, Number.parseInt(totalSessionsInput) || 7);
+    const current = Math.min(
+      Math.max(1, Number.parseInt(currentSessionInput) || 1),
+      total,
+    );
+    setCurrentSessionInput(String(current));
+  };
+
   const { session, mode, timeLeft, isRunning } = timerState;
   const totalDuration =
     mode === "study"
@@ -340,6 +571,20 @@ export default function App() {
     totalDuration > 0 ? ((totalDuration - timeLeft) / totalDuration) * 100 : 0;
 
   const isCopied = copyLabel === "COPIED!";
+
+  // SESSION text styles — applied ONLY to the session label
+  const sessionTextShadow = `2px 2px 0px ${hexToRgba(sessionStyle.sessionOutlineColor, 0.8)}, 4px 4px 8px ${hexToRgba(sessionStyle.sessionOutlineColor, 0.5)}`;
+  const sessionTextStroke =
+    sessionStyle.sessionOutlineThickness > 0
+      ? `${sessionStyle.sessionOutlineThickness}px ${sessionStyle.sessionOutlineColor}`
+      : "none";
+
+  // MODE text styles — applied ONLY to the STUDY/BREAK label
+  const modeTextShadow = `2px 2px 0px ${hexToRgba(modeStyle.modeOutlineColor, 0.8)}, 4px 4px 8px ${hexToRgba(modeStyle.modeOutlineColor, 0.5)}`;
+  const modeTextStroke =
+    modeStyle.modeOutlineThickness > 0
+      ? `${modeStyle.modeOutlineThickness}px ${modeStyle.modeOutlineColor}`
+      : "none";
 
   return (
     <>
@@ -353,31 +598,25 @@ export default function App() {
           }`}
           data-ocid="pomodoro.card"
         >
-          {/* Session label — large and bold */}
+          {/* Session label — SESSION text styles applied HERE ONLY */}
           <div
-            className={`session-label ${
-              visualMode === "study" ? "study-mode" : "break-mode"
-            }`}
+            className="session-label"
             data-ocid="pomodoro.section"
-          >
-            SESSION {session}/{pendingSessionsRef.current}
-          </div>
-
-          {/* Timer */}
-          <div
-            className="timer-display"
-            data-ocid="pomodoro.panel"
             style={{
-              textShadow:
-                visualMode === "study"
-                  ? "0 0 40px oklch(0.62 0.19 260 / 0.25)"
-                  : "0 0 40px oklch(0.72 0.18 35 / 0.25)",
+              color: sessionStyle.sessionTextColor,
+              textShadow: sessionTextShadow,
+              WebkitTextStroke: sessionTextStroke,
             }}
           >
+            SESSION {session}/{pendingTotalSessionsRef.current}
+          </div>
+
+          {/* Timer — NO session style applied, uses CSS class defaults only */}
+          <div className="timer-display" data-ocid="pomodoro.panel">
             {formatTime(timeLeft)}
           </div>
 
-          {/* Progress bar — resets when mode switches via key change */}
+          {/* Progress bar */}
           <div className="progress-track" data-ocid="pomodoro.row">
             <div
               className={`progress-fill ${
@@ -388,12 +627,15 @@ export default function App() {
             />
           </div>
 
-          {/* Mode label */}
+          {/* Mode label — MODE text styles applied HERE ONLY */}
           <div
-            className={`mode-label ${
-              visualMode === "study" ? "study-mode" : "break-mode"
-            }`}
+            className="mode-label"
             data-ocid="pomodoro.section"
+            style={{
+              color: modeStyle.modeColor,
+              textShadow: modeTextShadow,
+              WebkitTextStroke: modeTextStroke,
+            }}
           >
             {visualMode === "study" ? "STUDY" : "BREAK"}
           </div>
@@ -454,7 +696,6 @@ export default function App() {
               {isTransparent ? "BG OFF" : "BG ON"}
             </button>
 
-            {/* Settings gear button */}
             <button
               type="button"
               className={`settings-toggle-btn ${showSettings ? "active" : ""}`}
@@ -472,6 +713,183 @@ export default function App() {
             data-ocid="pomodoro.panel"
           >
             <div className="settings-grid">
+              {/* ── SESSION CONTROL ── */}
+              <div className="settings-section-title">Session Control</div>
+              <div className="settings-field">
+                <label
+                  htmlFor="setting-current-session"
+                  className="settings-label"
+                >
+                  Current Session
+                </label>
+                <input
+                  id="setting-current-session"
+                  type="number"
+                  className="settings-input session-control-input"
+                  value={currentSessionInput}
+                  min={1}
+                  max={Number.parseInt(totalSessionsInput) || 7}
+                  onChange={(e) => setCurrentSessionInput(e.target.value)}
+                  onBlur={handleCurrentSessionBlur}
+                  data-ocid="pomodoro.input"
+                />
+              </div>
+              <div className="settings-field">
+                <label
+                  htmlFor="setting-total-sessions"
+                  className="settings-label"
+                >
+                  Total Sessions
+                </label>
+                <input
+                  id="setting-total-sessions"
+                  type="number"
+                  className="settings-input session-control-input"
+                  value={totalSessionsInput}
+                  min={1}
+                  onChange={(e) => setTotalSessionsInput(e.target.value)}
+                  onBlur={handleTotalSessionsBlur}
+                  data-ocid="pomodoro.input"
+                />
+              </div>
+
+              {/* ── SESSION TEXT STYLE ── */}
+              <div className="settings-section-title">Session Text Style</div>
+              <div className="color-picker-field">
+                <label
+                  htmlFor="setting-session-color"
+                  className="settings-label"
+                >
+                  Session Text Color
+                </label>
+                <input
+                  id="setting-session-color"
+                  type="color"
+                  className="color-picker-input"
+                  value={sessionStyle.sessionTextColor}
+                  onChange={(e) =>
+                    setSessionStyle((prev) => ({
+                      ...prev,
+                      sessionTextColor: e.target.value,
+                    }))
+                  }
+                  data-ocid="pomodoro.input"
+                />
+              </div>
+              <div className="color-picker-field">
+                <label
+                  htmlFor="setting-session-outline-color"
+                  className="settings-label"
+                >
+                  Session Outline Color
+                </label>
+                <input
+                  id="setting-session-outline-color"
+                  type="color"
+                  className="color-picker-input"
+                  value={sessionStyle.sessionOutlineColor}
+                  onChange={(e) =>
+                    setSessionStyle((prev) => ({
+                      ...prev,
+                      sessionOutlineColor: e.target.value,
+                    }))
+                  }
+                  data-ocid="pomodoro.input"
+                />
+              </div>
+              <div className="settings-field">
+                <label
+                  htmlFor="setting-session-outline-thickness"
+                  className="settings-label"
+                >
+                  Session Outline ({sessionStyle.sessionOutlineThickness}px)
+                </label>
+                <input
+                  id="setting-session-outline-thickness"
+                  type="range"
+                  className="settings-range"
+                  min={0}
+                  max={3}
+                  step={0.5}
+                  value={sessionStyle.sessionOutlineThickness}
+                  onChange={(e) =>
+                    setSessionStyle((prev) => ({
+                      ...prev,
+                      sessionOutlineThickness: Number(e.target.value),
+                    }))
+                  }
+                  data-ocid="pomodoro.input"
+                />
+              </div>
+
+              {/* ── MODE TEXT STYLE ── */}
+              <div className="settings-section-title">Mode Text Style</div>
+              <div className="color-picker-field">
+                <label htmlFor="setting-mode-color" className="settings-label">
+                  Mode Text Color
+                </label>
+                <input
+                  id="setting-mode-color"
+                  type="color"
+                  className="color-picker-input"
+                  value={modeStyle.modeColor}
+                  onChange={(e) =>
+                    setModeStyle((prev) => ({
+                      ...prev,
+                      modeColor: e.target.value,
+                    }))
+                  }
+                  data-ocid="pomodoro.input"
+                />
+              </div>
+              <div className="color-picker-field">
+                <label
+                  htmlFor="setting-mode-outline-color"
+                  className="settings-label"
+                >
+                  Mode Outline Color
+                </label>
+                <input
+                  id="setting-mode-outline-color"
+                  type="color"
+                  className="color-picker-input"
+                  value={modeStyle.modeOutlineColor}
+                  onChange={(e) =>
+                    setModeStyle((prev) => ({
+                      ...prev,
+                      modeOutlineColor: e.target.value,
+                    }))
+                  }
+                  data-ocid="pomodoro.input"
+                />
+              </div>
+              <div className="settings-field">
+                <label
+                  htmlFor="setting-mode-outline-thickness"
+                  className="settings-label"
+                >
+                  Mode Outline ({modeStyle.modeOutlineThickness}px)
+                </label>
+                <input
+                  id="setting-mode-outline-thickness"
+                  type="range"
+                  className="settings-range"
+                  min={0}
+                  max={3}
+                  step={0.5}
+                  value={modeStyle.modeOutlineThickness}
+                  onChange={(e) =>
+                    setModeStyle((prev) => ({
+                      ...prev,
+                      modeOutlineThickness: Number(e.target.value),
+                    }))
+                  }
+                  data-ocid="pomodoro.input"
+                />
+              </div>
+
+              {/* ── TIMER SETTINGS ── */}
+              <div className="settings-section-title">Timer Settings</div>
               <div className="settings-field">
                 <label htmlFor="setting-study" className="settings-label">
                   Study Time (min)
@@ -504,7 +922,7 @@ export default function App() {
               </div>
               <div className="settings-field">
                 <label htmlFor="setting-sessions" className="settings-label">
-                  Total Sessions
+                  Default Sessions
                 </label>
                 <input
                   id="setting-sessions"
@@ -519,7 +937,9 @@ export default function App() {
               </div>
             </div>
             {isRunning && (
-              <p className="settings-hint">Changes apply after current cycle</p>
+              <p className="settings-hint">
+                Timer changes apply after current cycle
+              </p>
             )}
           </div>
         </div>
